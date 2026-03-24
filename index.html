@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XMON — Crypto Feed Intelligence</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    
+</head>
+
+<body>
+    <div id="setup-screen">
+        <div class="setup-box">
+            <div class="setup-title">X<span>MON</span></div>
+            <div class="setup-sub">CRYPTO FEED INTELLIGENCE — PERSONAL DASHBOARD</div>
+            <div class="field-group">
+                <div>
+                    <label class="field-label">ANTHROPIC API KEY</label>
+                    <input type="password" class="field-input" id="setup-anthropic" placeholder="sk-ant-...">
+                </div>
+                <div>
+                    <label class="field-label">X BEARER TOKEN (OPTIONAL — FOR LIVE DATA)</label>
+                    <input type="password" class="field-input" id="setup-x"
+                        placeholder="AAAA... (leave blank for mock data)">
+                </div>
+            </div>
+            <div class="setup-note">
+                <strong>🔒 Keys stored in your browser only.</strong> Never in the code, never pushed to GitHub. Safe to
+                publish this file publicly — only you have the keys.
+            </div>
+            <button class="btn-primary" onclick="saveKeys()">LAUNCH DASHBOARD →</button>
+            <div class="skip-link" onclick="launchApp()">Skip — run with mock data only</div>
+        </div>
+    </div>
+
+    <div id="app">
+        <div class="topbar">
+            <div class="logo">X<span>MON</span></div>
+            <div class="topbar-right">
+                <div class="status-dot">
+                    <div class="dot"></div>
+                    <span id="mode-label">MOCK MODE</span>
+                </div>
+                <button class="btn-sm" onclick="resetKeys()">⚙ KEYS</button>
+            </div>
+        </div>
+
+        <div class="app-layout">
+            <div class="feed-panel">
+                <div class="panel-header">
+                    <div class="panel-title">CURATED FEED</div>
+                    <div class="feed-controls">
+                        <button class="filter-tag active" onclick="filterFeed('all',this)">ALL</button>
+                        <button class="filter-tag" onclick="filterFeed('defi',this)">DEFI</button>
+                        <button class="filter-tag" onclick="filterFeed('mention',this)">MENTIONS</button>
+                        <button class="filter-tag" onclick="filterFeed('keyword',this)">KEYWORDS</button>
+                        <button class="refresh-btn" id="refresh-btn" onclick="loadFeed()">↻ REFRESH</button>
+                    </div>
+                </div>
+                <div class="keyword-bar" id="keyword-bar">
+                    <span class="kw-label">TRACK:</span>
+                    <input class="kw-input" id="kw-input" placeholder="+ add keyword" onkeydown="addKeyword(event)">
+                </div>
+                <div class="feed-list" id="feed-list">
+                    <div class="empty-state">
+                        <div class="icon">⚡</div>
+                        <p>Loading feed...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-panel">
+                <div class="panel-header">
+                    <div class="panel-title">AI ANALYST</div>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="msg assistant">
+                        <div class="msg-role">XMON AGENT</div>
+                        <div class="msg-bubble">
+                            gm. I'm monitoring your crypto feed and tracking mentions of your accounts.<br><br>
+                            Ask me things like:<br>
+                            — <em>"What's the sentiment on Reservoir today?"</em><br>
+                            — <em>"Any alpha in my mentions?"</em><br>
+                            — <em>"Summarize the rUSD narrative this week"</em>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="chat-input-wrap">
+                        <textarea class="chat-input" id="chat-input" placeholder="Ask about your feed..." rows="1"
+                            onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+                        <button class="send-btn" id="send-btn" onclick="sendMessage()">SEND</button>
+                    </div>
+                    <div class="chat-hint">Powered by Claude · Ctrl+Enter to send · Click any tweet to analyze it</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
