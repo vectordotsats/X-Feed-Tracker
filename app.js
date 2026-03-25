@@ -1,269 +1,399 @@
-let anthropicKey = '';
-        let xBearerToken = '';
-        let keywords = ['rUSD', 'wsrUSD', 'Reservoir', 'DAM'];
-        let allTweets = [];
-        let currentFilter = 'all';
-        let chatHistory = [];
+// ── XMON v2 — App Logic ──
 
-        const MOCK_TWEETS = [
-            {
-                id: '1', author: 'DeFi Degen', handle: '@defidegen_eth', avatar: 'D', time: '2m ago',
-                body: 'The rUSD PSM mechanism is actually underrated. Clean arbitrage loop keeping peg tight. More protocols should study this design.',
-                tags: ['defi', 'keyword'], priority: 'high', stats: { likes: 142, rts: 38, replies: 12 }
-            },
-            {
-                id: '2', author: 'Reservoir Intern', handle: '@ReservoirIntern', avatar: 'R', time: '8m ago',
-                body: "Season 3 is live. If you've been stacking wsrUSD you already know. Points don't sleep.",
-                tags: ['mention', 'keyword'], priority: 'high', stats: { likes: 89, rts: 21, replies: 7 }
-            },
-            {
-                id: '3', author: 'Stablecoin Alpha', handle: '@stablealpha', avatar: 'S', time: '15m ago',
-                body: 'IPOR Fusion now supports wsrUSD as a vault asset. This is the yield composability play people are sleeping on. $IPOR + Reservoir = interesting.',
-                tags: ['defi', 'keyword'], priority: 'high', stats: { likes: 203, rts: 67, replies: 29 }
-            },
-            {
-                id: '4', author: '0xvector_', handle: '@0xvector_', avatar: 'V', time: '22m ago',
-                body: 'Morpho market for rUSD is deeper than people realize. The utilization curve is set conservatively. Good for borrowers, safer for lenders.',
-                tags: ['mention'], priority: 'medium', stats: { likes: 31, rts: 8, replies: 4 }
-            },
-            {
-                id: '5', author: 'On-Chain Analyst', handle: '@onchain_anon', avatar: 'O', time: '34m ago',
-                body: 'Ran a Dune query on Reservoir Protocol TVL across chains. Monad deployment is showing early traction. Dashboard link in thread.',
-                tags: ['defi', 'keyword'], priority: 'medium', stats: { likes: 76, rts: 19, replies: 11 }
-            },
-            {
-                id: '6', author: 'DeFi Researcher', handle: '@defi_research', avatar: 'D', time: '51m ago',
-                body: "Comparative analysis of DAM tokenomics vs veToken models. Reservoir's approach is more gas efficient but sacrifices some governance expressiveness.",
-                tags: ['defi', 'keyword'], priority: 'medium', stats: { likes: 118, rts: 44, replies: 22 }
-            },
-            {
-                id: '7', author: 'Yield Hunter', handle: '@yieldhunter99', avatar: 'Y', time: '1h ago',
-                body: 'Currently rotating: USDC → wsrUSD → IPOR vault. Stack yield on yield. Not financial advice but also yes it is.',
-                tags: ['keyword'], priority: 'low', stats: { likes: 54, rts: 14, replies: 6 }
-            },
-            {
-                id: '8', author: 'Protocol Watcher', handle: '@protwatcher', avatar: 'P', time: '2h ago',
-                body: 'LayerZero + Reservoir Protocol cross-chain flows are picking up. Stargate bridge volume for rUSD is up 3x WoW.',
-                tags: ['defi', 'keyword'], priority: 'high', stats: { likes: 167, rts: 52, replies: 18 }
-            }
-        ];
+const STORAGE = {
+  keywords: 'xmon_keywords',
+  tweets: 'xmon_tweets',
+  chat: 'xmon_chat',
+};
 
-        window.onload = () => {
-            anthropicKey = localStorage.getItem('xmon_anthropic') || '';
-            xBearerToken = localStorage.getItem('xmon_x_token') || '';
-            const savedKws = localStorage.getItem('xmon_keywords');
-            if (savedKws) keywords = JSON.parse(savedKws);
-            if (anthropicKey) {
-                document.getElementById('setup-screen').style.display = 'none';
-                launchApp();
-            }
-        };
+const DEFAULT_KEYWORDS = ['rUSD', 'wsrUSD', 'Reservoir', 'DAM', 'IPOR', 'Morpho'];
 
-        function saveKeys() {
-            const ak = document.getElementById('setup-anthropic').value.trim();
-            const xk = document.getElementById('setup-x').value.trim();
-            if (!ak) { alert('Anthropic API key is required for the chat to work.'); return; }
-            anthropicKey = ak;
-            xBearerToken = xk;
-            localStorage.setItem('xmon_anthropic', ak);
-            if (xk) localStorage.setItem('xmon_x_token', xk);
-            document.getElementById('setup-screen').style.display = 'none';
-            launchApp();
-        }
+const SYSTEM_PROMPT = `You are XMON, an AI analyst built for a DeFi community manager running the @ReservoirIntern account on X (Reservoir Protocol).
 
-        function launchApp() {
-            document.getElementById('app').style.display = 'block';
-            if (xBearerToken) document.getElementById('mode-label').textContent = 'LIVE MODE';
-            renderKeywords();
-            loadFeed();
-        }
+Your job:
+- Analyze pasted tweets/threads for sentiment, narrative, and engagement signals
+- Draft reply suggestions in the ReservoirIntern voice: degen-native, slightly unhinged intern energy, concise, occasionally self-deprecating, always on-brand for Reservoir Protocol
+- Track narratives around: rUSD (PSM-backed stablecoin), wsrUSD (ERC4626 yield token, primary yield product), DAM (governance token), integrations (Morpho, IPOR Fusion, Stargate, LayerZero)
+- Flag engagement opportunities, FUD to address, or alpha to amplify
+- When drafting replies, give 2-3 options: one safe/professional, one full degen intern energy, one somewhere between
 
-        function resetKeys() {
-            localStorage.removeItem('xmon_anthropic');
-            localStorage.removeItem('xmon_x_token');
-            location.reload();
-        }
+Protocol context:
+- rUSD = PSM-backed stablecoin by Reservoir Protocol
+- wsrUSD = wrapped staked rUSD, ERC4626, the primary yield product (replaced srUSD)
+- trUSD = term-based product, NOT YET LIVE — never reference publicly
+- DAM = governance token
+- Key integrations: Morpho (lending markets), IPOR Fusion (wsrUSD as vault asset), LayerZero + Stargate (cross-chain), Steakhouse
+- Season 3 points are live, Season 2 claims happened via Merkl (50%/100% options)
 
-        function renderKeywords() {
-            const bar = document.getElementById('keyword-bar');
-            const input = document.getElementById('kw-input');
-            bar.querySelectorAll('.kw-chip').forEach(c => c.remove());
-            keywords.forEach(kw => {
-                const chip = document.createElement('div');
-                chip.className = 'kw-chip';
-                chip.innerHTML = `${kw} <span class="remove" onclick="removeKeyword('${kw}')">×</span>`;
-                bar.insertBefore(chip, input);
-            });
-            localStorage.setItem('xmon_keywords', JSON.stringify(keywords));
-        }
+Be concise. Max 4-5 sentences for analysis unless asked for more. For reply drafts, keep each option to 1-2 tweets max. No fluff. Think like a degen who reads whitepapers.`;
 
-        function addKeyword(e) {
-            if (e.key === 'Enter') {
-                const val = e.target.value.trim();
-                if (val && !keywords.includes(val)) { keywords.push(val); renderKeywords(); }
-                e.target.value = '';
-            }
-        }
+// ── State ──
 
-        function removeKeyword(kw) {
-            keywords = keywords.filter(k => k !== kw);
-            renderKeywords();
-        }
+let keywords = [];
+let tweets = [];
+let chatHistory = [];
+let isLoading = false;
 
-        async function loadFeed() {
-            const btn = document.getElementById('refresh-btn');
-            const span = document.createElement('span');
-            span.className = 'spinning';
-            span.textContent = '↻';
-            btn.innerHTML = '';
-            btn.appendChild(span);
-            btn.appendChild(document.createTextNode(' REFRESH'));
-            btn.disabled = true;
-            await new Promise(r => setTimeout(r, 700));
-            allTweets = MOCK_TWEETS;
-            renderFeed();
-            btn.innerHTML = '↻ REFRESH';
-            btn.disabled = false;
-        }
+// ── DOM refs ──
 
-        function renderFeed() {
-            const list = document.getElementById('feed-list');
-            const tweets = currentFilter === 'all' ? allTweets : allTweets.filter(t => t.tags.includes(currentFilter));
-            if (!tweets.length) {
-                list.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>No tweets match this filter.</p></div>';
-                return;
-            }
-            list.innerHTML = tweets.map((t, i) => {
-                const colors = ['#00ff87', '#00bfff', '#ff6b35', '#a855f7', '#f59e0b'];
-                let hash = 0;
-                for (let c of t.handle) hash = (hash << 5) - hash + c.charCodeAt(0);
-                const color = colors[Math.abs(hash) % colors.length];
-                const body = keywords.reduce((acc, kw) =>
-                    acc.replace(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                        '<span class="highlight">$1</span>'), t.body);
-                return `
-      <div class="tweet-card ${t.priority}" style="animation-delay:${i * 0.05}s" onclick="askAboutTweet('${t.id}')">
-        <div class="tweet-meta">
-          <div class="tweet-avatar" style="background:${color};color:#080b10">${t.avatar}</div>
-          <div><div class="tweet-author">${t.author}</div><div class="tweet-handle">${t.handle}</div></div>
-          <div class="tweet-time">${t.time}</div>
-        </div>
-        <div class="tweet-body">${body}</div>
-        <div class="tweet-tags">${t.tags.map(tag => `<span class="tag ${tag}">${tag.toUpperCase()}</span>`).join('')}</div>
-        <div class="tweet-stats"><span class="stat">♥ ${t.stats.likes}</span><span class="stat">↺ ${t.stats.rts}</span><span class="stat">↩ ${t.stats.replies}</span></div>
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+// ── Init ──
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadState();
+  bindEvents();
+  renderKeywords();
+  renderFeed();
+  renderChat();
+});
+
+function loadState() {
+  try {
+    const kw = localStorage.getItem(STORAGE.keywords);
+    keywords = kw ? JSON.parse(kw) : [...DEFAULT_KEYWORDS];
+  } catch { keywords = [...DEFAULT_KEYWORDS]; }
+
+  try {
+    const tw = localStorage.getItem(STORAGE.tweets);
+    tweets = tw ? JSON.parse(tw) : [];
+  } catch { tweets = []; }
+
+  try {
+    const ch = localStorage.getItem(STORAGE.chat);
+    chatHistory = ch ? JSON.parse(ch) : [];
+  } catch { chatHistory = []; }
+}
+
+function saveKeywords() { localStorage.setItem(STORAGE.keywords, JSON.stringify(keywords)); }
+function saveTweets() { localStorage.setItem(STORAGE.tweets, JSON.stringify(tweets)); }
+function saveChat() { localStorage.setItem(STORAGE.chat, JSON.stringify(chatHistory)); }
+
+// ── Events ──
+
+function bindEvents() {
+  // nav tabs
+  $$('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      $$('.view').forEach(v => v.classList.remove('active'));
+      $(`#view-${btn.dataset.view}`).classList.add('active');
+    });
+  });
+
+  // keyword input
+  $('#kw-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const val = e.target.value.trim();
+      if (val && !keywords.includes(val)) {
+        keywords.push(val);
+        saveKeywords();
+        renderKeywords();
+      }
+      e.target.value = '';
+    }
+  });
+
+  // chat input
+  $('#chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // auto-resize chat input
+  $('#chat-input').addEventListener('input', (e) => {
+    e.target.style.height = '40px';
+    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+  });
+
+  // send button
+  $('#send-btn').addEventListener('click', sendMessage);
+
+  // clear chat
+  $('#clear-chat').addEventListener('click', () => {
+    chatHistory = [];
+    localStorage.removeItem(STORAGE.chat);
+    renderChat();
+  });
+
+  // example chips
+  $$('.example-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $('#chat-input').value = chip.dataset.prompt;
+      $('#chat-input').focus();
+      $('#chat-input').dispatchEvent(new Event('input'));
+    });
+  });
+
+  // add tweet
+  $('#add-tweet').addEventListener('click', addTweet);
+  $('#feed-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      addTweet();
+    }
+  });
+}
+
+// ── Keywords ──
+
+function renderKeywords() {
+  const container = $('#kw-chips');
+  container.innerHTML = keywords.map(kw =>
+    `<div class="kw-chip">${esc(kw)}<span class="remove" data-kw="${esc(kw)}">×</span></div>`
+  ).join('');
+
+  container.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      keywords = keywords.filter(k => k !== btn.dataset.kw);
+      saveKeywords();
+      renderKeywords();
+      renderFeed(); // re-highlight
+    });
+  });
+}
+
+// ── Feed ──
+
+function addTweet() {
+  const input = $('#feed-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  tweets.unshift({
+    id: Date.now().toString(),
+    text,
+    addedAt: new Date().toISOString(),
+  });
+  saveTweets();
+  renderFeed();
+  input.value = '';
+}
+
+function removeTweet(id) {
+  tweets = tweets.filter(t => t.id !== id);
+  saveTweets();
+  renderFeed();
+}
+
+function analyzeTweet(id) {
+  const tweet = tweets.find(t => t.id === id);
+  if (!tweet) return;
+
+  // switch to chat view
+  $$('.nav-btn').forEach(b => b.classList.remove('active'));
+  $$('.nav-btn')[0].classList.add('active');
+  $$('.view').forEach(v => v.classList.remove('active'));
+  $('#view-chat').classList.add('active');
+
+  // populate input
+  const input = $('#chat-input');
+  input.value = `Analyze this tweet and suggest intern account replies:\n\n"${tweet.text}"`;
+  input.focus();
+  input.dispatchEvent(new Event('input'));
+}
+
+function highlightText(text) {
+  if (!keywords.length) return esc(text);
+  const regex = new RegExp(
+    `(${keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+    'gi'
+  );
+  return esc(text).replace(regex, '<span class="highlight">$1</span>');
+}
+
+function renderFeed() {
+  $('#feed-count').textContent = `(${tweets.length})`;
+
+  if (!tweets.length) {
+    $('#feed-list').innerHTML = `
+      <div class="empty-feed">
+        <div style="font-size:28px;margin-bottom:12px">📋</div>
+        <div>No tweets saved yet. Paste tweets above to start tracking.</div>
       </div>`;
-            }).join('');
-        }
+    return;
+  }
 
-        function filterFeed(type, el) {
-            currentFilter = type;
-            document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
-            el.classList.add('active');
-            renderFeed();
-        }
+  $('#feed-list').innerHTML = tweets.map(t => {
+    const time = new Date(t.addedAt).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    return `
+      <div class="tweet-card" data-id="${t.id}">
+        <div class="tweet-text">${highlightText(t.text)}</div>
+        <div class="tweet-footer">
+          <span class="tweet-time">${time}</span>
+          <div class="tweet-actions">
+            <button class="analyze-btn" data-id="${t.id}">ANALYZE ◈</button>
+            <button class="remove-btn" data-id="${t.id}">×</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
 
-        function askAboutTweet(id) {
-            const tweet = allTweets.find(t => t.id === id);
-            if (!tweet) return;
-            const input = document.getElementById('chat-input');
-            input.value = `Tell me more about this tweet from ${tweet.handle}: "${tweet.body}"`;
-            input.focus();
-            autoResize(input);
-        }
+  // bind actions
+  $$('.analyze-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      analyzeTweet(btn.dataset.id);
+    });
+  });
+  $$('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeTweet(btn.dataset.id);
+    });
+  });
+}
 
-        function autoResize(el) {
-            el.style.height = '40px';
-            el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-        }
+// ── Chat ──
 
-        function handleChatKey(e) {
-            if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); sendMessage(); }
-        }
+function renderChat() {
+  const container = $('#chat-messages');
 
-        async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const text = input.value.trim();
-            if (!text) return;
-            addMessage('user', text);
-            input.value = '';
-            autoResize(input);
-            chatHistory.push({ role: 'user', content: text });
-            const typingId = showTyping();
-            document.getElementById('send-btn').disabled = true;
+  if (!chatHistory.length) {
+    // show welcome
+    container.innerHTML = `
+      <div class="welcome">
+        <div class="welcome-icon">⚡</div>
+        <div class="welcome-title">gm. XMON is online.</div>
+        <div class="welcome-text">
+          Paste tweets in the <strong>FEED</strong> tab, then ask me to analyze them.
+          Or just ask me anything about Reservoir narratives.
+        </div>
+        <div class="welcome-examples">
+          <button class="example-chip" data-prompt="What's the current sentiment around wsrUSD?">"Sentiment on wsrUSD?"</button>
+          <button class="example-chip" data-prompt="Draft an intern reply to a bullish rUSD tweet">"Draft intern reply"</button>
+          <button class="example-chip" data-prompt="Summarize the Reservoir narrative this week based on my feed">"Weekly narrative summary"</button>
+        </div>
+      </div>`;
+    // rebind examples
+    container.querySelectorAll('.example-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        $('#chat-input').value = chip.dataset.prompt;
+        $('#chat-input').focus();
+        $('#chat-input').dispatchEvent(new Event('input'));
+      });
+    });
+    return;
+  }
 
-            try {
-                if (!anthropicKey) {
-                    removeTyping(typingId);
-                    addMessage('assistant', 'No Anthropic API key set. Click ⚙ KEYS to add your key and unlock the chat.');
-                    document.getElementById('send-btn').disabled = false;
-                    return;
-                }
+  container.innerHTML = chatHistory.map(msg => `
+    <div class="msg ${msg.role}">
+      <div class="msg-role">${msg.role === 'user' ? 'YOU' : 'XMON'}</div>
+      <div class="msg-bubble">${esc(msg.content)}</div>
+    </div>
+  `).join('');
 
-                const feedContext = allTweets.map(t =>
-                    `[${t.handle}] ${t.body} (${t.stats.likes} likes, tags: ${t.tags.join(', ')})`
-                ).join('\n');
+  scrollChat();
+}
 
-                const systemPrompt = `You are XMON, an AI analyst monitoring crypto Twitter for a DeFi community manager at Reservoir Protocol.
+function addChatMessage(role, content) {
+  const container = $('#chat-messages');
 
-Current feed:
-${feedContext}
+  // hide welcome if present
+  const welcome = container.querySelector('.welcome');
+  if (welcome) welcome.remove();
 
-Tracked keywords: ${keywords.join(', ')}
-Tracked accounts: @0xvector_, @ReservoirIntern
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <div class="msg-role">${role === 'user' ? 'YOU' : 'XMON'}</div>
+    <div class="msg-bubble">${esc(content)}</div>
+  `;
+  container.appendChild(div);
+  scrollChat();
+}
 
-Be concise, direct, degen-native in tone. Surface insights and actionable info. Max 3-4 sentences unless asked for more. No fluff.`;
+function showTyping() {
+  const container = $('#chat-messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = 'typing-indicator';
+  div.innerHTML = `
+    <div class="msg-role">XMON</div>
+    <div class="msg-bubble">
+      <div class="typing-indicator">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+  `;
+  container.appendChild(div);
+  scrollChat();
+}
 
-                const res = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': anthropicKey,
-                        'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true'
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 600,
-                        system: systemPrompt,
-                        messages: chatHistory
-                    })
-                });
+function removeTyping() {
+  const el = $('#typing-indicator');
+  if (el) el.remove();
+}
 
-                const data = await res.json();
-                if (data.error) throw new Error(data.error.message);
-                const reply = data.content?.[0]?.text || 'No response.';
-                chatHistory.push({ role: 'assistant', content: reply });
-                removeTyping(typingId);
-                addMessage('assistant', reply);
-            } catch (err) {
-                removeTyping(typingId);
-                addMessage('assistant', `Error: ${err.message}`);
-            }
-            document.getElementById('send-btn').disabled = false;
-        }
+function scrollChat() {
+  const container = $('#chat-messages');
+  container.scrollTop = container.scrollHeight;
+}
 
-        function addMessage(role, text) {
-            const container = document.getElementById('chat-messages');
-            const msg = document.createElement('div');
-            msg.className = `msg ${role}`;
-            msg.innerHTML = `<div class="msg-role">${role === 'user' ? 'YOU' : 'XMON AGENT'}</div><div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>`;
-            container.appendChild(msg);
-            container.scrollTop = container.scrollHeight;
-        }
+async function sendMessage() {
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text || isLoading) return;
 
-        function showTyping() {
-            const container = document.getElementById('chat-messages');
-            const id = 'typing-' + Date.now();
-            const msg = document.createElement('div');
-            msg.className = 'msg assistant';
-            msg.id = id;
-            msg.innerHTML = `<div class="msg-role">XMON AGENT</div><div class="msg-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
-            container.appendChild(msg);
-            container.scrollTop = container.scrollHeight;
-            return id;
-        }
+  // add user message
+  chatHistory.push({ role: 'user', content: text });
+  addChatMessage('user', text);
+  input.value = '';
+  input.style.height = '40px';
 
-        function removeTyping(id) {
-            const el = document.getElementById(id);
-            if (el) el.remove();
-        }
+  isLoading = true;
+  $('#send-btn').disabled = true;
+  showTyping();
+
+  try {
+    const feedContext = tweets.length
+      ? `\n\nSaved tweets in feed:\n${tweets.map((t, i) => `[${i + 1}] ${t.text}`).join('\n')}`
+      : '';
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT + feedContext + `\n\nTracked keywords: ${keywords.join(', ')}`,
+        messages: chatHistory.map(m => ({ role: m.role, content: m.content })),
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const reply = data.content?.map(b => b.text || '').join('') || 'No response.';
+    chatHistory.push({ role: 'assistant', content: reply });
+    removeTyping();
+    addChatMessage('assistant', reply);
+    saveChat();
+
+  } catch (err) {
+    const errMsg = `⚠ Error: ${err.message}`;
+    chatHistory.push({ role: 'assistant', content: errMsg });
+    removeTyping();
+    addChatMessage('assistant', errMsg);
+    saveChat();
+  }
+
+  isLoading = false;
+  $('#send-btn').disabled = false;
+}
+
+// ── Util ──
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
